@@ -1,49 +1,26 @@
-name: OpenWrt Builder
+name: OpenWrt Builder for Samsung J5 2015
 
 on:
   workflow_dispatch:
     inputs:
       device:
-        description: 'Target device (all = build all devices)'
-        required: false
+        description: 'Pilih device Samsung J5'
+        required: true
         type: choice
-        default: all
+        default: j5nlte
         options:
-          - all
-          - uz801
-          - uf02
+          - j5nlte
+          - j5lte
+          - j5ltechn
 
 env:
   UPLOAD_FIRMWARE: true
-  TZ: Europe/Madrid
+  TZ: Asia/Jakarta
 
 jobs:
-  resolve-version:
-    runs-on: ubuntu-22.04
-    outputs:
-      openwrt_version: ${{ steps.resolve.outputs.version }}
-    steps:
-    - name: Resolve latest stable OpenWrt 25.12.x tag
-      id: resolve
-      run: |
-        VERSION=$(git ls-remote --tags https://git.openwrt.org/openwrt/openwrt.git 'v25.12.*' \
-          | grep -oP 'v25\.12\.\d+$' | sort -V | tail -1)
-        if [ -z "$VERSION" ]; then
-          echo "ERROR: Could not resolve a stable OpenWrt 25.12.x version"
-          exit 1
-        fi
-        echo "Resolved OpenWrt version: $VERSION"
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-
   build:
-    needs: resolve-version
     runs-on: ubuntu-22.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        device: ${{ fromJSON((inputs.device == 'all' || inputs.device == '') && '["uz801","uf02"]' || format('["{0}"]', inputs.device)) }}
-
+    
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -55,23 +32,132 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
-        sudo -E ./devenv/dependencies.sh
+        sudo -E apt-get -qq install build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses-dev libssl-dev python3-distutils python3-pip python3-setuptools rsync swig unzip zlib1g-dev file wget time
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
     - name: Clone OpenWrt source code
       run: |
-        echo "Using OpenWrt ${{ needs.resolve-version.outputs.openwrt_version }}"
         git clone https://git.openwrt.org/openwrt/openwrt.git openwrt
-        git -C openwrt checkout ${{ needs.resolve-version.outputs.openwrt_version }}
+        cd openwrt
+        git checkout v23.05.5
 
-    - name: Load msm89xx target and packages
+    - name: Add Samsung J5 support
       run: |
-        chmod +x apply_patches.sh
-        ./apply_patches.sh openwrt
-        mv msm89xx openwrt/target/linux/msm89xx
-        mv packages openwrt/package/msm8916
+        cd openwrt
+        
+        # Clone target support
+        git clone https://github.com/openwrt/openwrt.git temp
+        
+        # Copy msm8916 target files
+        mkdir -p target/linux/msm8916
+        cp -r temp/target/linux/msm8916/* target/linux/msm8916/ || true
+        
+        # Copy device tree files for Samsung J5
+        mkdir -p target/linux/msm8916/files/arch/arm/boot/dts
+        cp temp/target/linux/msm8916/files/arch/arm/boot/dts/qcom-msm8916-samsung-j5.dts* target/linux/msm8916/files/arch/arm/boot/dts/ 2>/dev/null || true
+        cp temp/target/linux/msm8916/files/arch/arm/boot/dts/qcom-msm8916-samsung-j5nlte.dts* target/linux/msm8916/files/arch/arm/boot/dts/ 2>/dev/null || true
+        
+        rm -rf temp
+
+    - name: Configure for Samsung J5
+      run: |
+        cd openwrt
+        
+        # Set target to msm8916
+        cat > .config << 'EOF'
+# Target selection
+CONFIG_TARGET_msm8916=y
+CONFIG_TARGET_msm8916_DEVICE_samsung_j5nlte=y
+CONFIG_TARGET_MULTI_PROFILE=y
+CONFIG_TARGET_PER_DEVICE_ROOTFS=y
+
+# Base system
+CONFIG_PACKAGE_base-files=y
+CONFIG_PACKAGE_busybox=y
+CONFIG_PACKAGE_dropbear=y
+CONFIG_PACKAGE_firewall=y
+CONFIG_PACKAGE_netifd=y
+CONFIG_PACKAGE_odhcpd=y
+
+# LuCI (Web Interface)
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-ssl=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-app-opkg=y
+
+# Network tools
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_iw=y
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+CONFIG_PACKAGE_hostapd-common=y
+CONFIG_PACKAGE_dnsmasq-full=y
+
+# System tools
+CONFIG_PACKAGE_openssh-sftp-server=y
+CONFIG_PACKAGE_screen=y
+CONFIG_PACKAGE_tmux=y
+CONFIG_PACKAGE_htop=y
+CONFIG_PACKAGE_nano=y
+CONFIG_PACKAGE_vim=y
+CONFIG_PACKAGE_tcpdump=y
+
+# Filesystem support
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-ntfs=y
+
+# USB support
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb2=y
+CONFIG_PACKAGE_kmod-usb3=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-serial=y
+
+# Samsung J5 hardware specific
+CONFIG_PACKAGE_kmod-msm-pil=y
+CONFIG_PACKAGE_kmod-msm-wlan=y
+CONFIG_PACKAGE_kmod-msm-thermal=y
+CONFIG_PACKAGE_kmod-ath=y
+CONFIG_PACKAGE_kmod-ath9k=y
+CONFIG_PACKAGE_kmod-ath9k-common=y
+
+# Additional features
+CONFIG_PACKAGE_kmod-ledtrig-heartbeat=y
+CONFIG_PACKAGE_kmod-ledtrig-netdev=y
+CONFIG_PACKAGE_kmod-input-core=y
+CONFIG_PACKAGE_kmod-button-hotplug=y
+
+# Battery and power
+CONFIG_PACKAGE_kmod-battery-msm=y
+CONFIG_PACKAGE_kmod-power-reset-msm=y
+
+# Compression
+CONFIG_PACKAGE_gzip=y
+CONFIG_PACKAGE_unzip=y
+
+# Misc
+CONFIG_PACKAGE_zram-swap=y
+CONFIG_PACKAGE_ca-certificates=y
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_wget=y
+
+# Kernel configuration
+CONFIG_KERNEL_DEBUG_FS=n
+CONFIG_KERNEL_DEBUG_KERNEL=n
+CONFIG_KERNEL_DEBUG_INFO=n
+CONFIG_KERNEL_DEBUG_INFO_REDUCED=y
+CONFIG_KERNEL_KALLSYMS=n
+CONFIG_KERNEL_KALLSYMS_ALL=n
+
+# Build options
+CONFIG_IMAGE_OPTIMIZE=y
+CONFIG_CCACHE=y
+CONFIG_STRIP_KERNEL_EXPORTS=y
+CONFIG_TARGET_OPTIMIZATION="-Os -pipe -march=armv7-a -mtune=cortex-a53"
+EOF
 
     - name: Update and install feeds
       run: |
@@ -80,13 +166,7 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Load diffconfig
-      run: |
-        DEVICE="${{ matrix.device }}"
-        DIFFCONFIG="diffconfig_${DEVICE}"
-        [ -f "$DIFFCONFIG" ] && mv "$DIFFCONFIG" openwrt/.config
-
-    - name: Download package
+    - name: Download packages
       id: package
       run: |
         cd openwrt
@@ -94,33 +174,48 @@ jobs:
         make download -j8
         find dl -size -1024c -exec rm -f {} \; || true
 
-    - name: Compile the firmware
+    - name: Compile firmware
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "Compiling with $(nproc) threads"
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Organize files
+    - name: Prepare firmware files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        cd openwrt/bin/targets/msm8916/*
+        
+        # List all files for debugging
+        echo "Available firmware files:"
+        ls -la
+        
+        # Create zip with all firmware
+        zip -r firmware_samsung_j5_${{ env.FILE_DATE }}.zip *.bin *.img *.manifest *.dtb 2>/dev/null || true
+        
+        echo "FIRMWARE_DIR=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: openwrt_firmware_${{ matrix.device }}_${{needs.resolve-version.outputs.openwrt_version}}_${{ env.FILE_DATE }}
+        name: openwrt_samsung_j5_${{ env.FILE_DATE }}
         path: |
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*-squashfs-gpt_both0.bin
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*-squashfs-boot.img
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*-squashfs-system.img
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*.manifest
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*-flash.sh
-          ${{ env.FIRMWARE }}/openwrt-msm89xx-*-firmware.zip
+          ${{ env.FIRMWARE_DIR }}/firmware_samsung_j5_*.zip
+          ${{ env.FIRMWARE_DIR }}/openwrt-*-squashfs-*.bin
+          ${{ env.FIRMWARE_DIR }}/openwrt-*-squashfs-*.img
+          ${{ env.FIRMWARE_DIR }}/openwrt-*.manifest
+          ${{ env.FIRMWARE_DIR }}/openwrt-*.dtb
+        retention-days: 30
+
+    - name: Notify completion
+      if: always()
+      run: |
+        echo "========================================="
+        echo "Build completed for Samsung J5 2015"
+        echo "Check artifacts for firmware files"
+        echo "========================================="
