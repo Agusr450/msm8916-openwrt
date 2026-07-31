@@ -52,4 +52,12 @@ define Device/generic-uf02
 endef
 TARGET_DEVICES += generic-uf02
 
+define Device/samsung_j5
+  DEVICE_VENDOR := Samsung
+  DEVICE_MODEL := Galaxy J5
+  DEVICE_DTS := qcom-msm8916-samsung-j5
+  DEVICE_PACKAGES += kmod-usb2
+endef
+TARGET_DEVICES += samsung_j5
+
 endif
