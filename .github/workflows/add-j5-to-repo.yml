@@ -8,10 +8,9 @@ on:
         required: true
         default: 'main'
 
-# Permission untuk workflow (jika pakai GITHUB_TOKEN)
+# HANYA contents: write yang valid di sini
 permissions:
   contents: write
-  workflows: write
 
 jobs:
   add-j500g-files:
@@ -274,28 +273,22 @@ jobs:
         EOF
         chmod +x apply_patches.sh
     
-    - name: Update build.yml with J500G (skip if cannot modify)
+    - name: Update build.yml with J500G
       run: |
         if [ -f ".github/workflows/build.yml" ]; then
-          if ! grep -q "j500g" .github/workflows/build.yml; then
-            # Backup original
-            cp .github/workflows/build.yml .github/workflows/build.yml.bak
-            
-            # Add j500g to options
-            sed -i '/options:/,/^$/ s/- uf02/- uf02\n          - j500g/' .github/workflows/build.yml
-            sed -i 's/\["uz801","uf02"\]/["uz801","uf02","j500g"]/' .github/workflows/build.yml
-            
-            echo "build.yml updated"
-          fi
+          # Skip modifying workflow files if using PAT
+          echo "Skipping build.yml modification - please add j500g manually"
+          echo "Add 'j500g' to the device options in .github/workflows/build.yml"
         fi
     
-    - name: Commit and push changes
+    - name: Commit and push changes (excluding workflow files)
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add msm89xx/ diffconfig_j500g apply_patches.sh .github/workflows/build.yml || true
+        # Only add non-workflow files
+        git add msm89xx/ diffconfig_j500g apply_patches.sh || true
         if ! git diff --staged --quiet; then
-          git commit -m "Add J500G support files"
+          git commit -m "Add J500G DTS and diffconfig files"
           git push
         else
           echo "No changes to commit"
