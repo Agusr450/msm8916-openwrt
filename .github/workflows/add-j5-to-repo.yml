@@ -8,6 +8,9 @@ on:
         required: true
         default: 'main'
 
+permissions:
+  contents: write
+
 jobs:
   add-j500g-files:
     runs-on: ubuntu-22.04
@@ -199,7 +202,6 @@ jobs:
     
     - name: Update msm8916.mk with J500G device
       run: |
-        # Check if msm8916.mk exists, create if not
         if [ ! -f "msm89xx/image/msm8916.mk" ]; then
           mkdir -p msm89xx/image
           cat > msm89xx/image/msm8916.mk << 'EOF'
@@ -229,7 +231,6 @@ jobs:
         $(eval $(call BuildImage))
         EOF
         else
-          # Check if J500G already exists in msm8916.mk
           if ! grep -q "msm8916-samsung-j5" msm89xx/image/msm8916.mk; then
             cat >> msm89xx/image/msm8916.mk << 'EOF'
         
@@ -260,12 +261,10 @@ jobs:
             exit 1
         fi
         
-        # Copy target files
         if [ -d "msm89xx" ]; then
             cp -r msm89xx "$OPENWRT_DIR/target/linux/"
         fi
         
-        # Copy packages if exist
         if [ -d "packages" ]; then
             cp -r packages "$OPENWRT_DIR/package/msm8916"
         fi
@@ -277,7 +276,6 @@ jobs:
     - name: Update build.yml with J500G
       run: |
         if [ -f ".github/workflows/build.yml" ]; then
-          # Add j500g to device options if not exists
           if ! grep -q "j500g" .github/workflows/build.yml; then
             sed -i '/options:/,/^$/ s/- uf02/- uf02\n          - j500g/' .github/workflows/build.yml
             sed -i 's/\["uz801","uf02"\]/["uz801","uf02","j500g"]/' .github/workflows/build.yml
@@ -289,5 +287,5 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add msm89xx/ diffconfig_j500g apply_patches.sh .github/workflows/build.yml
-        git diff --staged --quiet || git commit -m "Add J500G support files" -m "Added DTS, diffconfig, and updated build workflow for Samsung J500G support"
+        git diff --staged --quiet || git commit -m "Add J500G support files"
         git push
