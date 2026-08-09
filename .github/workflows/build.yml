@@ -12,6 +12,7 @@ on:
           - all
           - uz801
           - uf02
+          - j500g
 
 env:
   UPLOAD_FIRMWARE: true
