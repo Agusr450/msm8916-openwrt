@@ -1,0 +1,293 @@
+name: Add J500G Support Files
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to push files to'
+        required: true
+        default: 'main'
+
+jobs:
+  add-j500g-files:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        ref: ${{ inputs.branch }}
+    
+    - name: Create directory structure
+      run: |
+        mkdir -p msm89xx/files/arch/arm64/boot/dts/qcom
+        mkdir -p msm89xx/image
+        mkdir -p scripts
+    
+    - name: Create DTSI file
+      run: |
+        cat > msm89xx/files/arch/arm64/boot/dts/qcom/msm8916-samsung-j5-common.dtsi << 'EOF'
+        // SPDX-License-Identifier: GPL-2.0-only
+        
+        #include "msm8916-pm8916.dtsi"
+        #include <dt-bindings/gpio/gpio.h>
+        #include <dt-bindings/input/input.h>
+        #include <dt-bindings/interrupt-controller/irq.h>
+        
+        / {
+          aliases {
+            mmc0 = &sdhc_1;
+            mmc1 = &sdhc_2;
+            serial0 = &blsp1_uart2;
+          };
+        
+          chosen {
+            stdout-path = "serial0";
+          };
+        
+          reserved-memory {
+            tz-apps@85500000 {
+              reg = <0x0 0x85500000 0x0 0xb00000>;
+              no-map;
+            };
+          };
+        
+          gpio-keys {
+            compatible = "gpio-keys";
+            pinctrl-names = "default";
+            pinctrl-0 = <&gpio_keys_default>;
+            label = "GPIO Buttons";
+        
+            button-volume-up {
+              label = "Volume Up";
+              gpios = <&tlmm 107 GPIO_ACTIVE_LOW>;
+              linux,code = <KEY_VOLUMEUP>;
+            };
+        
+            button-home {
+              label = "Home Key";
+              gpios = <&tlmm 109 GPIO_ACTIVE_LOW>;
+              linux,code = <KEY_HOMEPAGE>;
+            };
+          };
+        
+          i2c_muic: i2c-muic {
+            compatible = "i2c-gpio";
+            sda-gpios = <&tlmm 105 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+            scl-gpios = <&tlmm 106 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+            pinctrl-0 = <&muic_i2c_default>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+        
+            muic: extcon@25 {
+              compatible = "siliconmitus,sm5703-muic";
+              reg = <0x25>;
+              interrupt-parent = <&tlmm>;
+              interrupts = <12 IRQ_TYPE_EDGE_FALLING>;
+              pinctrl-0 = <&muic_int_default>;
+            };
+          };
+        
+          i2c_sensors: i2c-sensors {
+            compatible = "i2c-gpio";
+            sda-gpios = <&tlmm 31 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+            scl-gpios = <&tlmm 32 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+            pinctrl-0 = <&sensors_i2c_default>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+        
+            accelerometer: accelerometer@1d {
+              compatible = "st,lis2hh12";
+              reg = <0x1d>;
+              interrupts-extended = <&tlmm 115 IRQ_TYPE_LEVEL_HIGH>;
+              pinctrl-0 = <&accel_int_default>;
+              st,drdy-int-pin = <1>;
+            };
+          };
+        };
+        
+        &usb {
+          extcon = <&pm8916_usbin>;
+          dr_mode = "peripheral";
+        };
+        
+        &usb_hs_phy {
+          extcon = <&pm8916_usbin>;
+        };
+        
+        &sdhc_1 {
+          pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
+          pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+          pinctrl-names = "default", "sleep";
+        };
+        
+        &sdhc_2 {
+          pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
+          pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+          pinctrl-names = "default", "sleep";
+        };
+        
+        &blsp1_uart2 {
+          status = "okay";
+        };
+        
+        &smd_rpm_regulators {
+          vdd_l1_l2_l3-supply = <&pm8916_s3>;
+          vdd_l4_l5_l6-supply = <&pm8916_s4>;
+          vdd_l7-supply = <&pm8916_s4>;
+        
+          s3 {
+            regulator-min-microvolt = <1200000>;
+            regulator-max-microvolt = <1300000>;
+          };
+        };
+        EOF
+    
+    - name: Create DTS file
+      run: |
+        cat > msm89xx/files/arch/arm64/boot/dts/qcom/msm8916-samsung-j5.dts << 'EOF'
+        // SPDX-License-Identifier: GPL-2.0-only
+        
+        /dts-v1/;
+        
+        #include "msm8916-samsung-j5-common.dtsi"
+        
+        / {
+          model = "Samsung Galaxy J5 (2015)";
+          compatible = "samsung,j5", "qcom,msm8916";
+          chassis-type = "handset";
+        };
+        
+        &accelerometer {
+          vdd-supply = <&pm8916_l5>;
+          vddio-supply = <&pm8916_l5>;
+        };
+        
+        &blsp_i2c5 {
+          status = "disabled";
+        };
+        
+        &pm8916_codec {
+          qcom,micbias1-ext-cap;
+        };
+        
+        &usb_hs_phy {
+          qcom,init-seq = /bits/ 8 <0x1 0x19 0x2 0x0b>;
+        };
+        EOF
+    
+    - name: Create diffconfig_j500g
+      run: |
+        cat > diffconfig_j500g << 'EOF'
+        CONFIG_TARGET_msm89xx=y
+        CONFIG_TARGET_msm89xx_DEVICE_msm8916-samsung-j5=y
+        CONFIG_KERNEL_BUILD_DOMAIN="openwrt"
+        CONFIG_KERNEL_BUILD_USER="builder"
+        CONFIG_DEVEL=y
+        CONFIG_BUSYBOX_CUSTOM=y
+        CONFIG_BUSYBOX_CONFIG_FEATURE_FLOAT_SLEEP=y
+        CONFIG_PACKAGE_kmod-usb-net=y
+        CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+        CONFIG_PACKAGE_kmod-usb-net-rndis=y
+        CONFIG_PACKAGE_kmod-usb-serial=y
+        CONFIG_PACKAGE_kmod-usb-serial-option=y
+        CONFIG_PACKAGE_kmod-usb-acm=y
+        CONFIG_PACKAGE_luci=y
+        CONFIG_PACKAGE_luci-ssl=y
+        EOF
+    
+    - name: Update msm8916.mk with J500G device
+      run: |
+        # Check if msm8916.mk exists, create if not
+        if [ ! -f "msm89xx/image/msm8916.mk" ]; then
+          mkdir -p msm89xx/image
+          cat > msm89xx/image/msm8916.mk << 'EOF'
+        # SPDX-License-Identifier: GPL-2.0-only
+        
+        include $(TOPDIR)/rules.mk
+        
+        DEVICE_VARS += QCOM_BOOTIMG_FLASH_OFFSET
+        
+        define Device/Default
+          PROFILES := default
+          DEVICE_DTS_DIR := ../dts
+        endef
+        
+        define Device/msm8916-samsung-j5
+          DEVICE_VENDOR := Samsung
+          DEVICE_MODEL := Galaxy J5 (2015)
+          DEVICE_DTS := qcom/msm8916-samsung-j5
+          DEVICE_DTS_DIR := ../dts
+          DEVICE_PACKAGES := kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-serial-option
+          QCOM_BOOTIMG_FLASH_OFFSET := 0x0
+          IMAGES := boot.img system.img
+          IMAGE/system.img := append-rootfs | pad-to 256M
+        endef
+        TARGET_DEVICES += msm8916-samsung-j5
+        
+        $(eval $(call BuildImage))
+        EOF
+        else
+          # Check if J500G already exists in msm8916.mk
+          if ! grep -q "msm8916-samsung-j5" msm89xx/image/msm8916.mk; then
+            cat >> msm89xx/image/msm8916.mk << 'EOF'
+        
+        define Device/msm8916-samsung-j5
+          DEVICE_VENDOR := Samsung
+          DEVICE_MODEL := Galaxy J5 (2015)
+          DEVICE_DTS := qcom/msm8916-samsung-j5
+          DEVICE_DTS_DIR := ../dts
+          DEVICE_PACKAGES := kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-serial-option
+          QCOM_BOOTIMG_FLASH_OFFSET := 0x0
+          IMAGES := boot.img system.img
+          IMAGE/system.img := append-rootfs | pad-to 256M
+        endef
+        TARGET_DEVICES += msm8916-samsung-j5
+        EOF
+          fi
+        fi
+    
+    - name: Create apply_patches.sh
+      run: |
+        cat > apply_patches.sh << 'EOF'
+        #!/bin/bash
+        
+        OPENWRT_DIR="$1"
+        
+        if [ -z "$OPENWRT_DIR" ]; then
+            echo "Usage: $0 <openwrt_dir>"
+            exit 1
+        fi
+        
+        # Copy target files
+        if [ -d "msm89xx" ]; then
+            cp -r msm89xx "$OPENWRT_DIR/target/linux/"
+        fi
+        
+        # Copy packages if exist
+        if [ -d "packages" ]; then
+            cp -r packages "$OPENWRT_DIR/package/msm8916"
+        fi
+        
+        echo "Patches applied successfully to $OPENWRT_DIR"
+        EOF
+        chmod +x apply_patches.sh
+    
+    - name: Update build.yml with J500G
+      run: |
+        if [ -f ".github/workflows/build.yml" ]; then
+          # Add j500g to device options if not exists
+          if ! grep -q "j500g" .github/workflows/build.yml; then
+            sed -i '/options:/,/^$/ s/- uf02/- uf02\n          - j500g/' .github/workflows/build.yml
+            sed -i 's/\["uz801","uf02"\]/["uz801","uf02","j500g"]/' .github/workflows/build.yml
+          fi
+        fi
+    
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add msm89xx/ diffconfig_j500g apply_patches.sh .github/workflows/build.yml
+        git diff --staged --quiet || git commit -m "Add J500G support files" -m "Added DTS, diffconfig, and updated build workflow for Samsung J500G support"
+        git push
