@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+#include "msm8916-pm8916.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+  aliases {
+    mmc0 = &sdhc_1;
+    mmc1 = &sdhc_2;
+    serial0 = &blsp1_uart2;
+  };
+
+  chosen {
+    stdout-path = "serial0";
+  };
+
+  reserved-memory {
+    tz-apps@85500000 {
+      reg = <0x0 0x85500000 0x0 0xb00000>;
+      no-map;
+    };
+  };
+
+  gpio-keys {
+    compatible = "gpio-keys";
+    pinctrl-names = "default";
+    pinctrl-0 = <&gpio_keys_default>;
+    label = "GPIO Buttons";
+
+    button-volume-up {
+      label = "Volume Up";
+      gpios = <&tlmm 107 GPIO_ACTIVE_LOW>;
+      linux,code = <KEY_VOLUMEUP>;
+    };
+
+    button-home {
+      label = "Home Key";
+      gpios = <&tlmm 109 GPIO_ACTIVE_LOW>;
+      linux,code = <KEY_HOMEPAGE>;
+    };
+  };
+
+  i2c_muic: i2c-muic {
+    compatible = "i2c-gpio";
+    sda-gpios = <&tlmm 105 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+    scl-gpios = <&tlmm 106 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+    pinctrl-0 = <&muic_i2c_default>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    muic: extcon@25 {
+      compatible = "siliconmitus,sm5703-muic";
+      reg = <0x25>;
+      interrupt-parent = <&tlmm>;
+      interrupts = <12 IRQ_TYPE_EDGE_FALLING>;
+      pinctrl-0 = <&muic_int_default>;
+    };
+  };
+
+  i2c_sensors: i2c-sensors {
+    compatible = "i2c-gpio";
+    sda-gpios = <&tlmm 31 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+    scl-gpios = <&tlmm 32 (GPIO_ACTIVE_HIGH|GPIO_OPEN_DRAIN)>;
+    pinctrl-0 = <&sensors_i2c_default>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    accelerometer: accelerometer@1d {
+      compatible = "st,lis2hh12";
+      reg = <0x1d>;
+      interrupts-extended = <&tlmm 115 IRQ_TYPE_LEVEL_HIGH>;
+      pinctrl-0 = <&accel_int_default>;
+      st,drdy-int-pin = <1>;
+    };
+  };
+};
+
+&usb {
+  extcon = <&pm8916_usbin>;
+  dr_mode = "peripheral";
+};
+
+&usb_hs_phy {
+  extcon = <&pm8916_usbin>;
+};
+
+&sdhc_1 {
+  pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
+  pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+  pinctrl-names = "default", "sleep";
+};
+
+&sdhc_2 {
+  pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
+  pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+  pinctrl-names = "default", "sleep";
+};
+
+&blsp1_uart2 {
+  status = "okay";
+};
+
+&smd_rpm_regulators {
+  vdd_l1_l2_l3-supply = <&pm8916_s3>;
+  vdd_l4_l5_l6-supply = <&pm8916_s4>;
+  vdd_l7-supply = <&pm8916_s4>;
+
+  s3 {
+    regulator-min-microvolt = <1200000>;
+    regulator-max-microvolt = <1300000>;
+  };
+};

@@ -53,3 +53,15 @@ endef
 TARGET_DEVICES += generic-uf02
 
 endif
+
+define Device/msm8916-samsung-j5
+  DEVICE_VENDOR := Samsung
+  DEVICE_MODEL := Galaxy J5 (2015)
+  DEVICE_DTS := qcom/msm8916-samsung-j5
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-serial-option
+  QCOM_BOOTIMG_FLASH_OFFSET := 0x0
+  IMAGES := boot.img system.img
+  IMAGE/system.img := append-rootfs | pad-to 256M
+endef
+TARGET_DEVICES += msm8916-samsung-j5
